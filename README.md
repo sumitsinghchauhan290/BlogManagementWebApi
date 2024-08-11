@@ -16,3 +16,9 @@ This project is a simple Blog Management Web API built with ASP.NET Core that re
 
    clone API repository from https://github.com/sumitsinghchauhan290/BlogManagementWebApi/
    
+2. **Structure of API:**
+
+API is created on simple structure having Model and Controller.
+
+3. **Angular Url**
+Please set your Angular application URL in the AngularUrl key in appsettings.json file.
