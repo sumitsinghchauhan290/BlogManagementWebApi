@@ -28,50 +28,37 @@ namespace BlogManagementWebApi.Controllers
             {
                 return NotFound("Blog Storage file not found.");
             }
-            try
+
+            var blogs = await LoadBlogsAsync();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                var blogs = await LoadBlogsAsync();
-
-                if (!string.IsNullOrWhiteSpace(searchTerm))
-                {
-                    searchTerm = searchTerm.ToLower();
-                    blogs = blogs.Where(b => b.Username.ToLower().Contains(searchTerm)
-                                          || b.Text.ToLower().Contains(searchTerm))
-                                 .ToList();
-                }
-
-                var pagedBlogs = blogs
-                    .Skip((pageNumber - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
-
-                var totalItems = blogs.Count;
-                var totalPages = (int)System.Math.Ceiling(totalItems / (double)pageSize);
-
-                var response = new
-                {
-                    TotalItems = totalItems,
-                    TotalPages = totalPages,
-                    CurrentPage = pageNumber,
-                    PageSize = pageSize,
-                    Data = pagedBlogs
-                };
-
-                return Ok(response);
+                searchTerm = searchTerm.ToLower();
+                blogs = blogs.Where(b => b.Username.ToLower().Contains(searchTerm)
+                                      || b.Text.ToLower().Contains(searchTerm))
+                             .ToList();
             }
-            catch (JsonException ex)
+
+            var pagedBlogs = blogs
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            var totalItems = blogs.Count;
+            var totalPages = (int)System.Math.Ceiling(totalItems / (double)pageSize);
+
+            var response = new
             {
-                return StatusCode(500, "Error processing blog data. Please try again later.");
-            }
-            catch (IOException ex)
-            {
-                return StatusCode(500, "Error accessing the data file. Please try again later.");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "An unexpected error occurred. Please try again later.");
-            }
+                TotalItems = totalItems,
+                TotalPages = totalPages,
+                CurrentPage = pageNumber,
+                PageSize = pageSize,
+                Data = pagedBlogs
+            };
+
+            return Ok(response);
         }
+
 
         [HttpGet("GetBlog/{id}")]
         public async Task<IActionResult> GetBlog(int id)
@@ -80,25 +67,15 @@ namespace BlogManagementWebApi.Controllers
             {
                 return NotFound("Blog Storage file not found.");
             }
-            try
+            if (id < 1)
             {
-                var blogs = await LoadBlogsAsync();
+                return BadRequest("Invalid blog Id.");
+            }
+            var blogs = await LoadBlogsAsync();
 
-                var blog=blogs.Find(item=> item.Id == id);
-                return Ok(blog);
-            }
-            catch (JsonException ex)
-            {
-                return StatusCode(500, "Error processing blog data. Please try again later.");
-            }
-            catch (IOException ex)
-            {
-                return StatusCode(500, "Error accessing the data file. Please try again later.");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "An unexpected error occurred. Please try again later.");
-            }
+            var blog = blogs.Find(item => item.Id == id);
+            return Ok(blog);
+
         }
 
 
@@ -116,93 +93,77 @@ namespace BlogManagementWebApi.Controllers
                 return BadRequest(ModelState);
             }
 
-            try
-            {
-                var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
-                var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
+            var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
+            var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
 
-                newBlog.Id = blogs.Count > 0 ? blogs.Max(item => item.Id) + 1 : 1;
-                blogs.Add(newBlog);
+            newBlog.Id = blogs.Count > 0 ? blogs.Max(item => item.Id) + 1 : 1;
+            blogs.Add(newBlog);
 
-                await System.IO.File.WriteAllTextAsync(_jsonFilePath, JsonSerializer.Serialize(blogs));
+            await System.IO.File.WriteAllTextAsync(_jsonFilePath, JsonSerializer.Serialize(blogs));
 
-                return CreatedAtAction(nameof(GetBlogs), new { id = newBlog.Id }, newBlog);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "An unexpected error occurred. Please try again later.");
-            }
+            return CreatedAtAction(nameof(GetBlogs), new { id = newBlog.Id }, newBlog);
         }
+
+
 
 
         [HttpPut("UpdateBlog/{id}")]
         public async Task<IActionResult> UpdateBlog(int id, [FromBody] Blog updatedBlog)
         {
-            if (updatedBlog == null || id != updatedBlog.Id)
+            if (updatedBlog == null || id != updatedBlog.Id || id < 1)
             {
                 return BadRequest("Invalid blog data or ID mismatch.");
             }
 
-            try
+            if (!System.IO.File.Exists(_jsonFilePath))
             {
-                if (!System.IO.File.Exists(_jsonFilePath))
-                {
-                    return NotFound("Blog data file not found.");
-                }
-
-                var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
-                var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
-                var blog = blogs.Find(b => b.Id == id);
-
-                if (blog == null)
-                {
-                    return NotFound($"Blog with ID {id} not found.");
-                }
-
-                blog.Username = updatedBlog.Username;
-                blog.DateCreated = updatedBlog.DateCreated;
-                blog.Text = updatedBlog.Text;
-
-                await System.IO.File.WriteAllTextAsync(_jsonFilePath, JsonSerializer.Serialize(blogs));
-
-                return NoContent(); 
+                return NotFound("Blog data file not found.");
             }
-            catch (Exception ex)
+
+            var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
+            var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
+            var blog = blogs.Find(b => b.Id == id);
+
+            if (blog == null)
             {
-                return StatusCode(500, "An unexpected error occurred. Please try again later.");
+                return NotFound("Blog not found.");
             }
+
+            blog.Username = updatedBlog.Username;
+            blog.DateCreated = updatedBlog.DateCreated;
+            blog.Text = updatedBlog.Text;
+
+            await System.IO.File.WriteAllTextAsync(_jsonFilePath, JsonSerializer.Serialize(blogs));
+
+            return NoContent();
+
+
         }
 
         [HttpDelete("DeleteBlog/{id}")]
         public async Task<IActionResult> DeleteBlog(int id)
         {
-            try
+
+            if (!System.IO.File.Exists(_jsonFilePath))
             {
-                if (!System.IO.File.Exists(_jsonFilePath))
-                {
-                    return NotFound("Blog data file not found.");
-                }
-
-                var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
-                var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
-                var blog = blogs.Find(b => b.Id == id);
-
-                if (blog == null)
-                {
-                    return NotFound($"Blog with ID {id} not found.");
-                }
-
-                blogs.Remove(blog);
-                await System.IO.File.WriteAllTextAsync(_jsonFilePath, JsonSerializer.Serialize(blogs));
-
-                return NoContent();
+                return NotFound("Blog data file not found.");
             }
-            catch (Exception ex)
+
+            var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
+            var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
+            var blog = blogs.Find(b => b.Id == id);
+
+            if (blog == null)
             {
-                return StatusCode(500, "An unexpected error occurred. Please try again later.");
+                return NotFound($"Blog with ID {id} not found.");
             }
+
+            blogs.Remove(blog);
+            await System.IO.File.WriteAllTextAsync(_jsonFilePath, JsonSerializer.Serialize(blogs));
+
+            return NoContent();
         }
-
 
     }
 }
+
