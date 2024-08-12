@@ -9,36 +9,83 @@ namespace BlogManagementWebApi.Controllers
     public class BlogController : ControllerBase
     {
         private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly ILogger<BlogController> _logger;
         private readonly string _jsonFilePath;
-        public BlogController(IWebHostEnvironment webHostEnvironment, ILogger<BlogController> logger)
+        public BlogController(IWebHostEnvironment webHostEnvironment)
         {
             _webHostEnvironment = webHostEnvironment;
-            _logger = logger;
             _jsonFilePath = Path.Combine(_webHostEnvironment.ContentRootPath, "DataStorage", "BlogStorage.json");
+        }
+        private async Task<List<Blog>> LoadBlogsAsync()
+        {
+            var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
+            return JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
         }
 
         [HttpGet("GetBlogs")]
-        public async Task<IActionResult> GetBlogs()
+        public async Task<IActionResult> GetBlogs(string searchTerm = "", int pageNumber = 1, int pageSize = 10)
         {
             if (!System.IO.File.Exists(_jsonFilePath))
             {
                 return NotFound("Blog Storage file not found.");
             }
-
             try
             {
-                var jsonString = await System.IO.File.ReadAllTextAsync(_jsonFilePath);
+                var blogs = await LoadBlogsAsync();
 
-                if (string.IsNullOrWhiteSpace(jsonString))
+                if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
-                    _logger.LogInformation("Blog data file is empty.");
-                    return Ok(new List<Blog>()); 
+                    searchTerm = searchTerm.ToLower();
+                    blogs = blogs.Where(b => b.Username.ToLower().Contains(searchTerm)
+                                          || b.Text.ToLower().Contains(searchTerm))
+                                 .ToList();
                 }
 
-                var blogs = JsonSerializer.Deserialize<List<Blog>>(jsonString) ?? new List<Blog>();
+                var pagedBlogs = blogs
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
 
-                return Ok(blogs);
+                var totalItems = blogs.Count;
+                var totalPages = (int)System.Math.Ceiling(totalItems / (double)pageSize);
+
+                var response = new
+                {
+                    TotalItems = totalItems,
+                    TotalPages = totalPages,
+                    CurrentPage = pageNumber,
+                    PageSize = pageSize,
+                    Data = pagedBlogs
+                };
+
+                return Ok(response);
+            }
+            catch (JsonException ex)
+            {
+                return StatusCode(500, "Error processing blog data. Please try again later.");
+            }
+            catch (IOException ex)
+            {
+                return StatusCode(500, "Error accessing the data file. Please try again later.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "An unexpected error occurred. Please try again later.");
+            }
+        }
+
+        [HttpGet("GetBlog/{id}")]
+        public async Task<IActionResult> GetBlog(int id)
+        {
+            if (!System.IO.File.Exists(_jsonFilePath))
+            {
+                return NotFound("Blog Storage file not found.");
+            }
+            try
+            {
+                var blogs = await LoadBlogsAsync();
+
+                var blog=blogs.Find(item=> item.Id == id);
+                return Ok(blog);
             }
             catch (JsonException ex)
             {

@@ -13,7 +13,6 @@
   <ItemGroup>
     <Folder Include="Repository\Interface\" />
     <Folder Include="Repository\Implementation\" />
-    <Folder Include="Services\" />
   </ItemGroup>
 
 </Project>
